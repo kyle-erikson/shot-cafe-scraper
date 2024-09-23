@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/gocolly/colly"
+
+	_ "github.com/lib/pq"
 )
 
 // div id="box_26783" -> a href data-img-img="image url" class="box-img-load"
@@ -55,8 +58,34 @@ type ImageDetails struct {
 	} `json:"tags"`
 }
 
+func saveMovieInformation(db *sql.DB, imgDetails ImageDetails) {
+	// Insert movie information into the database
+	sqlStatement := fmt.Sprintf("INSERT INTO movies (title, year, director, camera, lens, aspect, image_url) VALUES ($1, $2, $3, $4, $5, $6, $7)", imgDetails.Image.Title, imgDetails.Image.Year, imgDetails.Image.Director, imgDetails.Image.Camera, imgDetails.Image.Lens, imgDetails.Image.Aspect, imgDetails.Image.Image)
+}
+
 func main() {
 	siteUrl := os.Args[1]
+	const (
+		host   = "localhost"
+		port   = 5432
+		user   = "postgres"
+		dbname = "personal"
+	)
+	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
+		"dbname=%s sslmode=disable",
+		host, port, user, dbname)
+	db, err := sql.Open("postgres", psqlInfo)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	err = db.Ping()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Successfully connected!")
 	// Instantiate default collector
 	c := colly.NewCollector(
 		colly.AllowedDomains("shot.cafe"),
