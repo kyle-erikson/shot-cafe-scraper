@@ -60,7 +60,7 @@ type ImageDetails struct {
 
 func saveImages(conn *pgx.Conn, imgUrl string, imageDetails ImageDetails) {
 	// Store image to hard drive
-	// fullImgUrl := "https://shot.cafe/" + imgUrl
+	fullImgUrl := "https://shot.cafe/" + imgUrl
 	// fileName := imgUrl[strings.LastIndex(imgUrl, "/")+1:]
 	// response, err := resty.New().R().Get(fullImgUrl)
 	// if err != nil {
@@ -84,7 +84,7 @@ func saveImages(conn *pgx.Conn, imgUrl string, imageDetails ImageDetails) {
 	movieId := InsertMovie(conn, imageDetails)
 
 	//Save image details to db
-	InsertMovieImage(conn, imageDetails, movieId, "test")
+	InsertMovieImage(conn, imageDetails, movieId, fullImgUrl)
 }
 
 func main() {
@@ -126,12 +126,12 @@ func main() {
 
 		imgGetUrl := "https://shot.cafe/server.php?c=" + imgNum
 		fmt.Println("ImgUrl: ", imgGetUrl)
-		response, err := resty.New().R().EnableTrace().SetResult(imgDetails).Get(imgGetUrl)
+		_, err := resty.New().R().EnableTrace().SetResult(&imgDetails).Get(imgGetUrl)
 		if err != nil {
 			fmt.Println("Error: ", err)
 			log.Fatal(err)
 		}
-		fmt.Println("Response: ", response)
+		// fmt.Println("Response: ", response)
 		saveImages(conn, imgUrl, imgDetails)
 	})
 
@@ -141,6 +141,10 @@ func main() {
 
 	fmt.Println("Scraping", siteUrl)
 
+	//TODO:
+	//1. Use the new url below for grabbing the image details
+	//2. Target the small totes p with number in <em> to get total number of images and calculate number of pages. I believe I got 21 images on one page.
+	//https://shot.cafe/results.php?j=1&tz=movie&movie=for-a-few-dollars-more-1965-310&page=1
 	//Start scraping on https://shot.cafe
 	c.Visit(siteUrl)
 }
