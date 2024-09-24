@@ -1,7 +1,7 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -9,8 +9,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/gocolly/colly"
-
-	_ "github.com/lib/pq"
+	"github.com/jackc/pgx/v5"
 )
 
 // div id="box_26783" -> a href data-img-img="image url" class="box-img-load"
@@ -55,37 +54,55 @@ type ImageDetails struct {
 		Three    []string `json:"3"`
 		MinusOne []string `json:"-1"`
 		One      []string `json:"1"`
+		Zero     []string `json:"0"`
 	} `json:"tags"`
 }
 
-func saveMovieInformation(db *sql.DB, imgDetails ImageDetails) {
-	// Insert movie information into the database
-	sqlStatement := fmt.Sprintf("INSERT INTO movies (title, year, director, camera, lens, aspect, image_url) VALUES ($1, $2, $3, $4, $5, $6, $7)", imgDetails.Image.Title, imgDetails.Image.Year, imgDetails.Image.Director, imgDetails.Image.Camera, imgDetails.Image.Lens, imgDetails.Image.Aspect, imgDetails.Image.Image)
+func saveImages(conn *pgx.Conn, imgUrl string, imageDetails ImageDetails) {
+	// Store image to hard drive
+	// fullImgUrl := "https://shot.cafe/" + imgUrl
+	// fileName := imgUrl[strings.LastIndex(imgUrl, "/")+1:]
+	// response, err := resty.New().R().Get(fullImgUrl)
+	// if err != nil {
+	// 	log.Fatalf("Failed to download image: %v", err)
+	// }
+
+	// err = os.WriteFile(fileName, response.Body(), 0644)
+	// if err != nil {
+	// 	log.Fatalf("Failed to save image: %v", err)
+	// }
+
+	// fmt.Printf("Image saved to %s\n", fileName)
+	// absPath, err := os.Getwd()
+	// if err != nil {
+	// 	log.Fatalf("Failed to get current directory: %v", err)
+	// }
+	// fullFilePath := absPath + "/" + fileName
+
+	//Save movie details to db
+	//Use a map to ensure movie hasn't already been saved
+	movieId := InsertMovie(conn, imageDetails)
+
+	//Save image details to db
+	InsertMovieImage(conn, imageDetails, movieId, "test")
 }
 
 func main() {
 	siteUrl := os.Args[1]
 	const (
 		host   = "localhost"
-		port   = 5432
+		port   = "5432"
 		user   = "postgres"
 		dbname = "personal"
 	)
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
-		"dbname=%s sslmode=disable",
-		host, port, user, dbname)
-	db, err := sql.Open("postgres", psqlInfo)
+	conn, err := NewPostgres(user, host, port, dbname)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Error : %v", err)
 	}
-	defer db.Close()
-
-	err = db.Ping()
-	if err != nil {
-		panic(err)
-	}
+	defer conn.Close(context.Background())
 
 	fmt.Println("Successfully connected!")
+
 	// Instantiate default collector
 	c := colly.NewCollector(
 		colly.AllowedDomains("shot.cafe"),
@@ -99,10 +116,6 @@ func main() {
 		imgUrl := e.Attr("data-img-img")
 		fmt.Printf("Link found: %q -> %s -> %s\n", e.Text, link, imgUrl)
 
-		// if count > 1 {
-		// 	return
-		// }
-
 		// Do a GET request to get all image and tag information
 		linkParts := strings.Split(link, "-")
 		imgNum := linkParts[len(linkParts)-1]
@@ -113,26 +126,15 @@ func main() {
 
 		imgGetUrl := "https://shot.cafe/server.php?c=" + imgNum
 		fmt.Println("ImgUrl: ", imgGetUrl)
-		response, err := resty.New().R().EnableTrace().SetResult(&imgDetails).Get(imgGetUrl)
+		response, err := resty.New().R().EnableTrace().SetResult(imgDetails).Get(imgGetUrl)
 		if err != nil {
 			fmt.Println("Error: ", err)
 			log.Fatal(err)
 		}
 		fmt.Println("Response: ", response)
-		// count++
+		saveImages(conn, imgUrl, imgDetails)
 	})
 
-	// On every a element which has href attribute call callback
-	// c.OnHTML("a[href]", func(e *colly.HTMLElement) {
-	// 	link := e.Attr("href")
-	// 	// Print link
-	// 	fmt.Printf("Link found: %q -> %s\n", e.Text, link)
-	// 	// Visit link found on page
-	// 	// Only those links are visited which are in AllowedDomains
-	// 	c.Visit(e.Request.AbsoluteURL(link))
-	// })
-
-	// Before making a request print "Visiting ..."
 	c.OnRequest(func(r *colly.Request) {
 		fmt.Println("Visiting", r.URL.String())
 	})
